@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sete Soluções Fiscais - Calendário de Vencimentos</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Poppins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- PDF Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            --brand-blue: #1F2D5A;
+            --brand-gold: #E8A021;
+            --brand-gold-light: #fdf2e1;
+            --brand-gold-dark: #d58c0a;
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f8f9fa; 
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: #dee2e6;
+        }
+        .calendar-day {
+            min-height: 140px;
+            transition: background-color 0.2s;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+        }
+        .calendar-day:hover {
+            background-color: #f1f3f5;
+        }
+        .events-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .events-container::-webkit-scrollbar {
+            width: 4px;
+        }
+        .events-container::-webkit-scrollbar-thumb {
+            background-color: #ced4da;
+            border-radius: 20px;
+        }
+        .event-item {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid;
+            word-break: break-word;
+            position: relative;
+        }
+        .delete-icon {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: #f1f3f5;
+            color: #868e96;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+            line-height: 1;
+        }
+        .event-item:hover .delete-icon {
+            opacity: 1;
+        }
+        .delete-icon:hover {
+            background-color: #e63946;
+            color: white;
+        }
+        .event-imposto {
+            background-color: var(--brand-gold-light);
+            color: #8c5a03;
+            border-left-color: var(--brand-gold);
+        }
+        .event-imposto:hover {
+            background-color: #fae9c8;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .event-parcelamento {
+            background-color: #e9ecef;
+            color: #343a40;
+            border-left-color: #868e96;
+        }
+        .event-parcelamento:hover {
+            background-color: #ced4da;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(31, 45, 90, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 90%;
+            max-width: 550px;
+        }
+        .form-input, .form-select {
+            background-color: #f8f9fa;
+            border-color: #dee2e6;
+        }
+        .form-input:focus, .form-select:focus {
+            --tw-ring-color: var(--brand-gold);
+            border-color: var(--brand-gold);
+        }
+        .btn-primary {
+            background-color: var(--brand-blue);
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .btn-primary:hover {
+            background-color: #162141;
+        }
+        .btn-accent {
+            background-color: var(--brand-gold);
+            color: var(--brand-blue);
+            transition: background-color 0.2s;
+        }
+        .btn-accent:hover {
+            background-color: var(--brand-gold-dark);
+        }
+    </style>
+</head>
+<body class="antialiased text-gray-800">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <div id="export-area">
+            <!-- Header -->
+            <header class="flex flex-col sm:flex-row justify-between items-center mb-8">
+                <div class="text-center sm:text-left w-full">
+                    <h1 class="text-3xl sm:text-4xl font-bold" style="color: var(--brand-blue);">Sete Soluções Fiscais</h1>
+                    <p class="text-lg" style="color: var(--brand-gold);">Calendário de Vencimentos</p>
+                </div>
+                <div class="flex items-center space-x-3 mt-4 sm:mt-0 flex-shrink-0" id="header-buttons">
+                    <button id="export-pdf-btn" class="btn-accent font-bold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m15 15-3 3-3-3"/></svg>
+                        <span>Exportar</span>
+                    </button>
+                    <button id="add-event-btn" class="btn-primary font-bold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                        <span>Adicionar</span>
+                    </button>
+                </div>
+            </header>
+            
+            <!-- Client Info -->
+            <div class="bg-white p-4 rounded-xl shadow-md mb-6 border border-gray-200">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                    <div id="client-name-container">
+                        <label for="client-name-input" class="block text-sm font-medium text-gray-600 mb-1">Nome do Cliente:</label>
+                        <input type="text" id="client-name-input" placeholder="Digite o nome do cliente" class="form-input w-full py-2 px-3 rounded-md border text-gray-700 leading-tight focus:outline-none focus:ring-2">
+                        <div id="client-name-pdf" class="hidden text-gray-800 pt-2 text-lg"></div>
+                    </div>
+                    <div id="client-cnpj-container">
+                        <label for="client-cnpj-input" class="block text-sm font-medium text-gray-600 mb-1">CNPJ:</label>
+                        <input type="text" id="client-cnpj-input" placeholder="00.000.000/0001-00" class="form-input w-full py-2 px-3 rounded-md border text-gray-700 leading-tight focus:outline-none focus:ring-2">
+                        <div id="client-cnpj-pdf" class="hidden text-gray-800 pt-2 text-lg"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calendar Controls -->
+            <div class="flex justify-between items-center mb-4 bg-white p-3 rounded-xl shadow-md border border-gray-200">
+                <button id="prev-month-btn" class="p-2 rounded-full hover:bg-gray-200 transition-colors text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <h2 id="current-month-year" class="text-xl font-semibold text-center" style="color: var(--brand-blue);"></h2>
+                <button id="next-month-btn" class="p-2 rounded-full hover:bg-gray-200 transition-colors text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+
+            <!-- Calendar -->
+            <div id="calendar-container" class="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+                <div class="grid grid-cols-7 text-center font-semibold p-3 border-b border-gray-200" style="background-color: var(--brand-blue); color: white;">
+                    <div>Dom</div>
+                    <div>Seg</div>
+                    <div>Ter</div>
+                    <div>Qua</div>
+                    <div>Qui</div>
+                    <div>Sex</div>
+                    <div>Sáb</div>
+                </div>
+                <div id="calendar-grid" class="calendar-grid">
+                    <!-- Calendar days will be generated by JS -->
+                </div>
+            </div>
+            
+            <!-- Export Footer -->
+            <div id="export-footer" class="hidden text-center text-sm text-gray-500 mt-4">
+                <p id="export-date"></p>
+            </div>
+        </div>
+        
+        <!-- Loading Spinner for PDF generation -->
+        <div id="loading-spinner" class="hidden fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50">
+            <div class="flex flex-col items-center bg-white p-8 rounded-lg shadow-xl">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4" style="border-color: var(--brand-gold);"></div>
+                <p class="mt-4 text-lg font-semibold text-gray-700">Gerando PDF, por favor aguarde...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Modal -->
+    <div id="event-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h3 id="modal-title" class="text-2xl font-bold mb-6" style="color: var(--brand-blue);">Adicionar Vencimento</h3>
+            <form id="event-form" class="space-y-4">
+                <input type="hidden" id="event-id">
+                <div>
+                    <label for="event-tax-name" class="block text-gray-700 text-sm font-bold mb-2">Nome do Imposto/Obrigação:</label>
+                    <input type="text" id="event-tax-name" class="form-input shadow appearance-none border rounded-md w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2" placeholder="Ex: DAS, ICMS, Aluguel" required>
+                </div>
+                <div>
+                    <label for="event-title" class="block text-gray-700 text-sm font-bold mb-2">Observações (Opcional):</label>
+                    <input type="text" id="event-title" placeholder="Ex: Ref. competência 07/2025" class="form-input shadow appearance-none border rounded-md w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="event-date" class="block text-gray-700 text-sm font-bold mb-2">Data:</label>
+                        <input type="date" id="event-date" class="form-input shadow appearance-none border rounded-md w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2" required>
+                    </div>
+                    <div>
+                        <label for="event-value" class="block text-gray-700 text-sm font-bold mb-2">Valor (R$):</label>
+                        <input type="number" step="0.01" id="event-value" placeholder="150.00" class="form-input shadow appearance-none border rounded-md w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2" required>
+                    </div>
+                </div>
+                <div>
+                    <label for="event-type" class="block text-gray-700 text-sm font-bold mb-2">Tipo:</label>
+                    <select id="event-type" class="form-select shadow border rounded-md w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2">
+                        <option value="imposto">Imposto</option>
+                        <option value="parcelamento">Parcelamento</option>
+                    </select>
+                </div>
+                <div class="flex items-center justify-end space-x-3 pt-4">
+                    <button type="button" id="delete-event-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline hidden transition-colors">Excluir</button>
+                    <button type="button" id="cancel-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-colors">Cancelar</button>
+                    <button type="submit" class="btn-primary font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4" style="color: var(--brand-blue);">Confirmar Exclusão</h3>
+            <p class="text-gray-600 mb-6">Tem certeza de que deseja excluir este evento? Esta ação não pode ser desfeita.</p>
+            <div class="flex items-center justify-end space-x-3">
+                <button type="button" id="confirm-cancel-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                <button type="button" id="confirm-delete-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // State
+            let currentDate = new Date();
+            let events = JSON.parse(localStorage.getItem('calendarEvents_SeteSolucoes_v6')) || [];
+            let clientInfo = JSON.parse(localStorage.getItem('clientInfo_SeteSolucoes_v6')) || { name: '', cnpj: '' };
+            let eventIdToDelete = null;
+
+            // DOM Elements
+            const calendarGrid = document.getElementById('calendar-grid');
+            const currentMonthYearEl = document.getElementById('current-month-year');
+            const prevMonthBtn = document.getElementById('prev-month-btn');
+            const nextMonthBtn = document.getElementById('next-month-btn');
+            const eventModal = document.getElementById('event-modal');
+            const eventForm = document.getElementById('event-form');
+            const modalTitle = document.getElementById('modal-title');
+            const deleteEventBtn = document.getElementById('delete-event-btn');
+            const cancelBtn = document.getElementById('cancel-btn');
+            const addEventBtn = document.getElementById('add-event-btn');
+            const exportPdfBtn = document.getElementById('export-pdf-btn');
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const clientNameInput = document.getElementById('client-name-input');
+            const clientCnpjInput = document.getElementById('client-cnpj-input');
+            const clientNameContainer = document.getElementById('client-name-container');
+            const clientCnpjContainer = document.getElementById('client-cnpj-container');
+            const clientNamePdf = document.getElementById('client-name-pdf');
+            const clientCnpjPdf = document.getElementById('client-cnpj-pdf');
+            const exportArea = document.getElementById('export-area');
+            const headerButtons = document.getElementById('header-buttons');
+            const exportFooter = document.getElementById('export-footer');
+            const exportDateEl = document.getElementById('export-date');
+            const confirmModal = document.getElementById('confirm-modal');
+            const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+            const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
+
+            // --- Client Info Logic ---
+            const loadClientInfo = () => {
+                clientNameInput.value = clientInfo.name;
+                clientCnpjInput.value = clientInfo.cnpj;
+            };
+
+            const saveClientInfo = () => {
+                clientInfo.name = clientNameInput.value;
+                clientInfo.cnpj = clientCnpjInput.value;
+                localStorage.setItem('clientInfo_SeteSolucoes_v6', JSON.stringify(clientInfo));
+            };
+            
+            clientNameInput.addEventListener('input', saveClientInfo);
+            clientCnpjInput.addEventListener('input', saveClientInfo);
+
+            // --- Main Render Function ---
+            const renderCalendar = () => {
+                calendarGrid.innerHTML = '';
+                const year = currentDate.getFullYear();
+                const month = currentDate.getMonth();
+
+                currentMonthYearEl.textContent = `${currentDate.toLocaleDateString('pt-BR', { month: 'long' })} de ${year}`;
+
+                const firstDayOfMonth = new Date(year, month, 1).getDay();
+                const lastDateOfMonth = new Date(year, month + 1, 0).getDate();
+                const lastDateOfLastMonth = new Date(year, month, 0).getDate();
+
+                for (let i = firstDayOfMonth; i > 0; i--) {
+                    calendarGrid.innerHTML += `<div class="p-2 bg-gray-50 text-gray-400 border-t border-l border-gray-200"></div>`;
+                }
+
+                for (let i = 1; i <= lastDateOfMonth; i++) {
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                    const dayEl = document.createElement('div');
+                    dayEl.className = 'calendar-day p-2 border-t border-l border-gray-200 bg-white';
+                    dayEl.dataset.date = dateStr;
+                    
+                    const today = new Date();
+                    const isToday = i === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                    
+                    const dayNumberEl = document.createElement('div');
+                    dayNumberEl.className = 'text-sm font-semibold text-right mb-1';
+                    dayNumberEl.innerHTML = `<span class="${isToday ? 'bg-[var(--brand-blue)] text-white rounded-full w-7 h-7 flex items-center justify-center float-right' : 'text-gray-500'}">${i}</span>`;
+                    dayEl.appendChild(dayNumberEl);
+
+                    const dayEvents = events.filter(e => e.date === dateStr).sort((a,b) => a.taxName.localeCompare(b.taxName));
+                    if (dayEvents.length > 0) {
+                        const eventsContainer = document.createElement('div');
+                        eventsContainer.className = 'events-container space-y-1';
+                        dayEvents.forEach(event => {
+                            const eventEl = document.createElement('div');
+                            eventEl.className = `event-item event-${event.type}`;
+                            eventEl.dataset.eventId = event.id;
+                            eventEl.innerHTML = `
+                                <span class="delete-icon" data-delete-id="${event.id}">×</span>
+                                <strong class="block text-sm pr-4">${event.taxName}</strong>
+                                <span class="text-xs">${event.title || ''}</span>
+                                <span class="block text-xs font-semibold mt-1">R$ ${parseFloat(event.value).toFixed(2)}</span>
+                            `;
+                            eventsContainer.appendChild(eventEl);
+                        });
+                        dayEl.appendChild(eventsContainer);
+                    }
+                    
+                    calendarGrid.appendChild(dayEl);
+                }
+                
+                const remainingCells = 42 - (firstDayOfMonth + lastDateOfMonth);
+                 for (let i = 1; i <= remainingCells; i++) {
+                    calendarGrid.innerHTML += `<div class="p-2 bg-gray-50 text-gray-400 border-t border-l border-gray-200"></div>`;
+                }
+            };
+
+            // --- Modal Logic ---
+            const openModal = (eventId = null, date = null) => {
+                eventForm.reset();
+                const eventIdInput = document.getElementById('event-id');
+                const eventDateInput = document.getElementById('event-date');
+                
+                if (eventId) {
+                    const event = events.find(e => e.id === eventId);
+                    modalTitle.textContent = 'Editar Vencimento';
+                    eventIdInput.value = event.id;
+                    document.getElementById('event-tax-name').value = event.taxName;
+                    document.getElementById('event-title').value = event.title;
+                    eventDateInput.value = event.date;
+                    document.getElementById('event-value').value = event.value;
+                    document.getElementById('event-type').value = event.type;
+                    deleteEventBtn.classList.remove('hidden');
+                } else {
+                    modalTitle.textContent = 'Adicionar Vencimento';
+                    eventIdInput.value = '';
+                    eventDateInput.value = date || new Date().toISOString().split('T')[0];
+                    deleteEventBtn.classList.add('hidden');
+                }
+                eventModal.classList.remove('hidden');
+            };
+
+            const closeModal = () => eventModal.classList.add('hidden');
+
+            const openConfirmModal = (eventId) => {
+                eventIdToDelete = eventId;
+                confirmModal.classList.remove('hidden');
+            };
+            
+            const closeConfirmModal = () => {
+                eventIdToDelete = null;
+                confirmModal.classList.add('hidden');
+            };
+
+            const deleteEvent = (eventId) => {
+                events = events.filter(event => event.id !== eventId);
+                localStorage.setItem('calendarEvents_SeteSolucoes_v6', JSON.stringify(events));
+                renderCalendar();
+            };
+
+            // --- Event Handlers ---
+            calendarGrid.addEventListener('click', (e) => {
+                const target = e.target;
+                if (target.classList.contains('delete-icon')) {
+                    e.stopPropagation();
+                    openConfirmModal(target.dataset.deleteId);
+                } else if (target.closest('.event-item')) {
+                     e.stopPropagation();
+                    openModal(target.closest('.event-item').dataset.eventId);
+                } else if (target.closest('.calendar-day')) {
+                    openModal(null, target.closest('.calendar-day').dataset.date);
+                }
+            });
+
+            prevMonthBtn.addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                renderCalendar();
+            });
+
+            nextMonthBtn.addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                renderCalendar();
+            });
+
+            addEventBtn.addEventListener('click', () => openModal());
+            cancelBtn.addEventListener('click', closeModal);
+            eventModal.addEventListener('click', (e) => {
+                if (e.target === eventModal) closeModal();
+            });
+
+            eventForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('event-id').value;
+                const newEvent = {
+                    id: id || Date.now().toString(),
+                    taxName: document.getElementById('event-tax-name').value,
+                    title: document.getElementById('event-title').value,
+                    date: document.getElementById('event-date').value,
+                    value: document.getElementById('event-value').value,
+                    type: document.getElementById('event-type').value,
+                };
+
+                if (id) {
+                    events = events.map(event => event.id === id ? newEvent : event);
+                } else {
+                    events.push(newEvent);
+                }
+                
+                localStorage.setItem('calendarEvents_SeteSolucoes_v6', JSON.stringify(events));
+                closeModal();
+                renderCalendar();
+            });
+
+            deleteEventBtn.addEventListener('click', () => {
+                const id = document.getElementById('event-id').value;
+                closeModal();
+                openConfirmModal(id);
+            });
+
+            confirmDeleteBtn.addEventListener('click', () => {
+                if (eventIdToDelete) {
+                    deleteEvent(eventIdToDelete);
+                }
+                closeConfirmModal();
+            });
+
+            confirmCancelBtn.addEventListener('click', closeConfirmModal);
+            confirmModal.addEventListener('click', (e) => {
+                if (e.target === confirmModal) closeConfirmModal();
+            });
+
+
+            // --- PDF Export ---
+            const prepareForPdf = (isPrinting) => {
+                if (isPrinting) {
+                    clientNamePdf.textContent = clientInfo.name || 'Não informado';
+                    clientCnpjPdf.textContent = clientInfo.cnpj || 'Não informado';
+                    clientNameContainer.classList.add('text-center');
+                    clientCnpjContainer.classList.add('text-center');
+                    clientNameInput.classList.add('hidden');
+                    clientCnpjInput.classList.add('hidden');
+                    clientNamePdf.classList.remove('hidden');
+                    clientCnpjPdf.classList.remove('hidden');
+                    headerButtons.classList.add('hidden');
+
+                    const now = new Date();
+                    const dateString = now.toLocaleDateString('pt-BR');
+                    const timeString = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    exportDateEl.textContent = `Exportado em: ${dateString} às ${timeString}`;
+                    exportFooter.classList.remove('hidden');
+                } else {
+                    clientNameContainer.classList.remove('text-center');
+                    clientCnpjContainer.classList.remove('text-center');
+                    clientNameInput.classList.remove('hidden');
+                    clientCnpjInput.classList.remove('hidden');
+                    clientNamePdf.classList.add('hidden');
+                    clientCnpjPdf.classList.add('hidden');
+                    headerButtons.classList.remove('hidden');
+                    exportFooter.classList.add('hidden');
+                }
+            };
+            
+            exportPdfBtn.addEventListener('click', () => {
+                loadingSpinner.classList.remove('hidden');
+                prepareForPdf(true);
+
+                const { jsPDF } = window.jspdf;
+                
+                html2canvas(exportArea, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#f8f9fa'
+                }).then(canvas => {
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF({
+                        orientation: 'landscape',
+                        unit: 'px',
+                        format: [canvas.width, canvas.height]
+                    });
+                    
+                    pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+                    
+                    const monthYear = currentMonthYearEl.textContent.replace(' de ', '_');
+                    const clientName = clientInfo.name.replace(/ /g, '_') || 'cliente';
+                    pdf.save(`Calendario_${clientName}_${monthYear}.pdf`);
+                    
+                    prepareForPdf(false);
+                    loadingSpinner.classList.add('hidden');
+                }).catch(err => {
+                    console.error("Error generating PDF:", err);
+                    prepareForPdf(false);
+                    loadingSpinner.classList.add('hidden');
+                    alert("Ocorreu um erro ao gerar o PDF. Tente novamente.");
+                });
+            });
+
+            // Initial Render
+            loadClientInfo();
+            renderCalendar();
+        });
+    </script>
+
+</body>
+</html>
